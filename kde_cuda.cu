@@ -1,5 +1,8 @@
 
+#include <iostream>
 #include <cassert>
+using std::cout;
+using std::endl;
 
 #define PI 3.1415926
 
