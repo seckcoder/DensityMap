@@ -3,6 +3,7 @@
 
 #include <cassert>
 #include <string>
+#include <cstdlib>
 
 #define malloc2D(name, xDim, yDim, type) do {               \
     name = (type **)malloc(xDim * sizeof(type *));          \

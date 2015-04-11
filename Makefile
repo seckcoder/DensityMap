@@ -1,5 +1,5 @@
 
-all: seq, cuda
+all: seq
 
 
 OPTFLAGS  = -g
