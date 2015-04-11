@@ -1,0 +1,6 @@
+data
+output
+*.o
+*.swp
+seq_main
+cuda_main
