@@ -1,6 +1,11 @@
 
-all: seq
+all: seq cuda
 
+
+H_FILES = kde.h
+
+# ----
+#  SEQ
 
 OPTFLAGS  = -g
 INCFLAGS = -I.
@@ -13,20 +18,31 @@ CPP = g++
 .c.o:
 	$(CC) $(CFLAGS) -c $<
 
-H_FILES = kde.h
-SEQ_SRC = kde_seq.cc seq_main.cc file_io.cc wtime.cc
+SEQ_SRC = kde_seq.cc main.cc file_io.cc wtime.cc
 
-SEQ_OBJ = $(SEQ_SRC:%.c=%.o)
+SEQ_OBJ = $(SEQ_SRC:%.cc=%.o)
 
-seq: seq_main
-seq_main: $(SEQ_OBJ) $(H_FILES)
-	$(CPP) $(LDFLAGS) -o seq_main $(SEQ_OBJ) $(LIBS)
+seq: seq_main $(H_FILES)
+seq_main: $(SEQ_OBJ)
+	$(CPP) $(LDFLAGS) $^ -o $@ $(LIBS)
 
-CUDA_C_OBJ = $(CUDA_C_SRC:%.cu=%.o)
+# -----
+#  CUDA
 
+NVCC = nvcc
+NVCCFLAGS = $(CFLAGS)
 
-cuda: cuda_main
-cuda_main: $(CUDA_C_OBJ)
+%.o: %.cu
+	$(NVCC) $(NVCCFLAGS) -o $@ -c $<
+
+CUDA_C_SRC = main.cc file_io.cc wtime.cc
+CUDA_CU_SRC = kde_cuda.cu
+CUDA_C_OBJ = $(CUDA_C_SRC:%.cc=%.o)
+CUDA_CU_OBJ = $(CUDA_CU_SRC:%.cu=%.o)
+
+cuda_main: $(CUDA_C_OBJ) $(CUDA_CU_OBJ)
+	$(NVCC) $(LDFLAGS) $^ -o $@ $(LIBS)
+cuda: cuda_main $(H_FILES)
 
 clean:
-	rm -rf *.o seq_main
+	rm -rf *.o seq_main cuda_main

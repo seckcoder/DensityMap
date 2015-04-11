@@ -1,4 +1,7 @@
 
+#include <cassert>
+
+#define PI 3.1415926
 
 static inline int nextPowerOfTwo(int n) {
     n--;
@@ -16,7 +19,7 @@ static inline int nextPowerOfTwo(int n) {
 template <class T>
 inline T getFirstDeviceValue(T *device_arr) {
   T ans;
-  checkCuda(cudaMemcpy(&ans, device_arr, sizeof(T), cudaMemcpyDeviceToHost));
+  cudaMemcpy(&ans, device_arr, sizeof(T), cudaMemcpyDeviceToHost);
   return ans;
 }
 
@@ -62,7 +65,7 @@ void estimateCoord(
 // reduce the array to array[0]
 __global__
 void reduce(float *array) {
-  extern __shared__ float *cache;
+  extern __shared__ float cache[];
   cache[threadIdx.x] = array[threadIdx.x];
   __syncthreads();
   
@@ -89,14 +92,14 @@ void kde2D(
   
   float *deviceObjs;
   cudaMalloc(&deviceObjs, numObjs * 2 * sizeof(float));
-  cudaMemcpy(deviceObjs, objCoords[0], numObjs * 2 * sizeof(float));
+  cudaMemcpy(&deviceObjs, objCoords[0], numObjs * 2 * sizeof(float), cudaMemcpyHostToDevice);
 
   const int numThreadsPerBlock = 1024;
   const int numBlocks = int(std::ceil((float)numObjs / (float)numThreadsPerBlock));
   const int clusterBlockSharedDataSize = numThreadsPerBlock * sizeof(float);
 
   // for reduction
-  const int numReductionThreads = nextPowerOfTwo(numClusterBlocks);
+  const int numReductionThreads = nextPowerOfTwo(numBlocks);
   const int reductionSharedDataSize = numReductionThreads * sizeof(float);
 
   assert(numReductionThreads <= 1024);
@@ -109,8 +112,8 @@ void kde2D(
     for (int j = 0; j < height; j++) {
       float x = float(i) / float(width - 1);
       float y = float(j) / float(height - 1);
-      estimateCoord<<numBlocks, numThreadsPerBlock,
-        clusterBlockSharedDataSize>>(
+      estimateCoord<<<numBlocks, numThreadsPerBlock,
+        clusterBlockSharedDataSize>>>(
           deviceObjs,
           numObjs,
           x,y, // center
