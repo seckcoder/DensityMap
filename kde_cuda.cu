@@ -6,6 +6,8 @@ using std::endl;
 
 #define PI 3.1415926
 
+#define DEBUG
+
 static inline int nextPowerOfTwo(int n) {
     n--;
 
@@ -123,8 +125,10 @@ void kde2D(
           sigma, // sigma coeff
           deviceIntermediates
           );
-      reduce<<<1, numReductionThreads, reductionSharedDataSize>>>(
-          deviceIntermediates);
+      if (numBlocks > 1) {
+        reduce<<<1, numReductionThreads, reductionSharedDataSize>>>(
+            deviceIntermediates);
+      }
       densityMap[i][j] = getFirstDeviceValue(deviceIntermediates);
     }
   }
