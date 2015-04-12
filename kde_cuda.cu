@@ -128,4 +128,6 @@ void kde2D(
       densityMap[i][j] = getFirstDeviceValue(deviceIntermediates);
     }
   }
+  cudaFree(deviceObjs);
+  cudaFree(deviceIntermediates);
 }
