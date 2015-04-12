@@ -4,7 +4,7 @@
 using std::cout;
 using std::endl;
 
-#define PI 3.1415926
+#define PI 3.1415926f
 
 #define DEBUG
 
@@ -48,6 +48,8 @@ void estimateCoord(
     float *estimates_block_acc) {
   extern __shared__ float gauss_estimates[];
   int objectId = blockDim.x * blockIdx.x + threadIdx.x;
+  // initialize shared memory
+  gauss_estimates[threadIdx.x] = 0;
   if (objectId < numObjs) {
     float x = objCoords[objectId*2],
           y = objCoords[objectId*2+1];
