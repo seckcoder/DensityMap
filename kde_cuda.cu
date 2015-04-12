@@ -1,12 +1,9 @@
 
 #include <iostream>
 #include <cassert>
+#include "config.h"
 using std::cout;
 using std::endl;
-
-#define PI 3.1415926f
-
-#define DEBUG
 
 static inline int nextPowerOfTwo(int n) {
     n--;
@@ -34,9 +31,28 @@ float gauss2d(float center_x, float center_y, float sigma, float x, float y) {
   float sigma_square_inv = 1.f / sigma_square;
   float delta_x = x - center_x,
         delta_y = y - center_y;
+
   return 1.f/(2.f*PI*sigma_square) * exp(-0.5f * sigma_square_inv * (delta_x*delta_x + delta_y * delta_y));
 }
 
+
+// for debugging purpose
+#if 0
+__global__ static
+void estimateCoordSeq(
+    float *objCoords,
+    int numObjs,
+    float center_x,
+    float center_y,
+    float sigma,
+    float *estimate_block_acc) {
+  float estimate = 0.f;
+  for (int i = 0; i < numObjs; i++) {
+    estimate += gauss2d(center_x,center_y,sigma,objCoords[i*2],objCoords[i*2+1]);
+  }
+  estimate_block_acc[0] = estimate;
+}
+#endif
 
 __global__ static
 void estimateCoord(
@@ -49,23 +65,22 @@ void estimateCoord(
   extern __shared__ float gauss_estimates[];
   int objectId = blockDim.x * blockIdx.x + threadIdx.x;
   // initialize shared memory
-  gauss_estimates[threadIdx.x] = 0;
+  gauss_estimates[threadIdx.x] = 0.f;
   if (objectId < numObjs) {
     float x = objCoords[objectId*2],
           y = objCoords[objectId*2+1];
     gauss_estimates[threadIdx.x] = gauss2d(center_x, center_y, sigma, x, y);
+  }
+  __syncthreads();
+  // reduction
+  for (int s = blockDim.x / 2; s > 0; s >>= 1) {
+    if (threadIdx.x < s) {
+      gauss_estimates[threadIdx.x] += gauss_estimates[threadIdx.x + s];
+    }
     __syncthreads();
-    
-    // reduction
-    for (int s = blockDim.x / 2; s > 0; s >>= 1) {
-      if (threadIdx.x < s) {
-        gauss_estimates[threadIdx.x] += gauss_estimates[threadIdx.x + s];
-      }
-      __syncthreads();
-    }
-    if (threadIdx.x == 0) {
-      estimates_block_acc[blockIdx.x] = gauss_estimates[0];
-    }
+  }
+  if (threadIdx.x == 0) {
+    estimates_block_acc[blockIdx.x] = gauss_estimates[0];
   }
 }
 
@@ -99,7 +114,7 @@ void kde2D(
   
   float *deviceObjs;
   cudaMalloc(&deviceObjs, numObjs * 2 * sizeof(float));
-  cudaMemcpy(&deviceObjs, objCoords[0], numObjs * 2 * sizeof(float), cudaMemcpyHostToDevice);
+  cudaMemcpy(deviceObjs, objCoords[0], numObjs * 2 * sizeof(float), cudaMemcpyHostToDevice);
 
   const int numThreadsPerBlock = 1024;
   const int numBlocks = int(std::ceil((float)numObjs / (float)numThreadsPerBlock));

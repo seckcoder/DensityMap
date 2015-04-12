@@ -2,7 +2,7 @@
 all: seq cuda
 
 
-H_FILES = kde.h
+H_FILES = kde.h config.h
 
 # ----
 #  SEQ
