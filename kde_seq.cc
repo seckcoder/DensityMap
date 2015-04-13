@@ -1,3 +1,4 @@
+#include <iostream>
 #include <algorithm>
 #include <cmath>
 #include "config.h"
@@ -21,7 +22,12 @@ float estimateCoord(
     float y) {
   float estimate = 0.f;
   for (int i = 0; i < numObjs; i++) {
-    estimate += gauss2d(x,y,sigma,objCoords[i][0],objCoords[i][1]);
+    estimate += gauss2d(
+        objCoords[i][0], // center
+        objCoords[i][1],
+        sigma,
+        x,y // density map coord
+        );
   }
   return estimate;
 }

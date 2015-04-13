@@ -25,7 +25,7 @@ inline T getFirstDeviceValue(T *device_arr) {
   return ans;
 }
 
-__device__ inline static
+__host__ __device__ inline static
 float gauss2d(float centerX, float centerY, float sigma, float x, float y) {
   float sigma_square = sigma * sigma;
   float sigma_square_inv = 1.f / sigma_square;
@@ -42,13 +42,13 @@ __global__ static
 void estimateCoordSeq(
     float *objCoords,
     int numObjs,
-    float centerX,
-    float centerY,
+    float x,
+    float y,
     float sigma,
     float *estimate_block_acc) {
   float estimate = 0.f;
   for (int i = 0; i < numObjs; i++) {
-    estimate += gauss2d(centerX,centerY,sigma,objCoords[i*2],objCoords[i*2+1]);
+    estimate += gauss2d(objCoords[i*2],objCoords[i*2+1], sigma, x, y);
   }
   estimate_block_acc[0] = estimate;
 }
@@ -72,14 +72,38 @@ void printIntermediates(float *deviceIntermediates, float *intermediates, int n)
   }
   cout << endl;
 }
+
+__global__ static
+void updateDensityMapSeq(
+    float centerX,
+    float centerY,
+    int width,
+    int height,
+    float sigma,
+    float *deviceDensityMap) {
+  for (int mapCoordIdx = 0; mapCoordIdx < 128; mapCoordIdx++) {
+    int i = mapCoordIdx / height;
+    int j = mapCoordIdx % height;
+    float x = (float)i / (float)(width-1);
+    float y = (float)j / (float)(height-1);
+    if (i < width) {
+      deviceDensityMap[mapCoordIdx] += gauss2d(
+          centerX,
+          centerY,
+          sigma,
+          x,y);
+    }
+  }
+}
+
 #endif
 
 __global__ static
 void estimateCoord(
     float *objCoords,
     int numObjs,
-    float centerX,
-    float centerY,
+    float x,
+    float y,
     float sigma,
     float *estimatesBlockAcc) {
   extern __shared__ float gauss_estimates[];
@@ -87,8 +111,8 @@ void estimateCoord(
   // initialize shared memory
   gauss_estimates[threadIdx.x] = 0.f;
   if (objectId < numObjs) {
-    float x = objCoords[objectId*2],
-          y = objCoords[objectId*2+1];
+    float centerX = objCoords[objectId*2],
+          centerY = objCoords[objectId*2+1];
     gauss_estimates[threadIdx.x] = gauss2d(centerX, centerY, sigma, x, y);
   }
   __syncthreads();
@@ -124,31 +148,7 @@ void reduce(float *array) {
   }
 }
 
-void kde2D(
-    float **objCoords,
-    int numObjs,  // 10 - 100000
-    float **densityMap,
-    int width,  // 1024
-    int height, // 768
-    float sigma) {
-  if (width * height > numObjs) {
-    kde2DParallelMap(
-        objCoords,
-        numObjs,
-        densityMap,
-        width,
-        height,
-        sigma);
-  } else {
-    kde2DParallelObject(
-        objCoords,
-        numObjs,
-        densityMap,
-        width,
-        height,
-        sigma);
-  }
-}
+
 
 void kde2DParallelObject(
     float **objCoords,
@@ -188,7 +188,7 @@ void kde2DParallelObject(
         clusterBlockSharedDataSize>>>(
           deviceObjs,
           numObjs,
-          x,y, // center
+          x,y, // map coord
           sigma, // sigma coeff
           deviceIntermediates
           );
@@ -205,17 +205,25 @@ void kde2DParallelObject(
 
 __global__ static
 void updateDensityMap(
-    float objCoord[2],
+    float centerX,
+    float centerY,
     int width,
     int height,
     float sigma,
     float *deviceDensityMap) {
   int mapCoordIdx = blockDim.x * blockIdx.x + threadIdx.x;
-  
-  int centerX = mapCoordIx / height;
-  int centerY = mapCoordIdx % height;
-  deviceDensityMap[map_coord_idx] += gauss2d(
-      centerX, centerY, sigma, objCoord[0], objCoord[1]);
+
+  int i = mapCoordIdx / height;
+  int j = mapCoordIdx % height;
+  if (i < width) {
+    float x = float(i) / float(width-1);
+    float y = float(j) / float(height-1);
+    deviceDensityMap[mapCoordIdx] += gauss2d(
+        centerX, /* center */
+        centerY, 
+        sigma,
+        x,y);
+  }
 }
 
 void kde2DParallelMap(
@@ -230,17 +238,55 @@ void kde2DParallelMap(
   cudaMalloc(&deviceDensityMap, width * height * sizeof(float));
   cudaMemset(deviceDensityMap, 0, width * height * sizeof(float));
 
-  const int numThreadsPerBlock = 1024;
+  const int numThreadsPerBlock = 128;
   const int numBlocks = int(std::ceil((float)(width * height) / (float)numThreadsPerBlock));
   for (int i = 0; i < numObjs; i++) {
-    updateDensityMap<<<numBlocks, numThreadsPerBlock>>>(
-        objCoords[i],
+    /*
+    updateDensityMapSeq<<<1,1>>>(
+        objCoords[i][0],
+        objCoords[i][1],
         width,
         height,
-        sigma
+        sigma,
+        deviceDensityMap);
+        */
+    updateDensityMap<<<numBlocks, numThreadsPerBlock>>>(
+        objCoords[i][0],
+        objCoords[i][1],
+        width,
+        height,
+        sigma,
         deviceDensityMap);
   }
   cudaMemcpy(densityMap[0], deviceDensityMap, width*height*sizeof(float),
       cudaMemcpyDeviceToHost);
   cudaFree(deviceDensityMap);
+}
+
+void kde2D(
+    float **objCoords,
+    int numObjs,  // 10 - 100000
+    float **densityMap,
+    int width,  // 1024
+    int height, // 768
+    float sigma) {
+  if (width * height > numObjs) {
+    cout << "parallel map" << endl;
+    kde2DParallelMap(
+        objCoords,
+        numObjs,
+        densityMap,
+        width,
+        height,
+        sigma);
+  } else {
+    cout << "parallel obj" << endl;
+    kde2DParallelObject(
+        objCoords,
+        numObjs,
+        densityMap,
+        width,
+        height,
+        sigma);
+  }
 }
