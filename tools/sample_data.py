@@ -14,7 +14,7 @@ def normalize(m):
     min_v = np.min(m)
     return (m - min_v) / (max_v - min_v)
 
-for n in [10, 100, 1000]:
+for n in [10, 100, 1000, 10000]:
     m = gen_data(n)
     m1 = normalize(m[:,0])
     m2 = normalize(m[:,1])

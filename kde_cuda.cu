@@ -37,7 +37,7 @@ float gauss2d(float center_x, float center_y, float sigma, float x, float y) {
 
 
 // for debugging purpose
-#if 0
+#ifdef DEBUG
 __global__ static
 void estimateCoordSeq(
     float *objCoords,
@@ -51,6 +51,26 @@ void estimateCoordSeq(
     estimate += gauss2d(center_x,center_y,sigma,objCoords[i*2],objCoords[i*2+1]);
   }
   estimate_block_acc[0] = estimate;
+}
+
+__global__ static
+void reduceSeq(
+    float *array,
+    int n) {
+  float res;
+  for (int i = 0; i < n; i++) {
+    res += array[i];
+  }
+  array[0] = res;
+}
+
+void printIntermediates(float *deviceIntermediates, float *intermediates, int n) {
+  cudaMemcpy(intermediates, deviceIntermediates, n * sizeof(float),
+             cudaMemcpyDeviceToHost);
+  for (int k = 0; k < n; k++) {
+    cout << intermediates[k] << " ";
+  }
+  cout << endl;
 }
 #endif
 
@@ -128,12 +148,16 @@ void kde2D(
 
   float *deviceIntermediates;
   cudaMalloc(&deviceIntermediates, numReductionThreads * sizeof(float));
-  cudaMemset(&deviceIntermediates, 0, numReductionThreads * sizeof(float));
+  cudaMemset(deviceIntermediates, 0, numReductionThreads * sizeof(float));
+
+  float *intermediates = (float *)malloc(numReductionThreads * sizeof(float));
+  
   
   for (int i = 0; i < width; i++) {
     for (int j = 0; j < height; j++) {
       float x = float(i) / float(width - 1);
       float y = float(j) / float(height - 1);
+      // estimateCoordSeq<<<1,1>>>(deviceObjs, numObjs, x,y,sigma, deviceIntermediates);
       estimateCoord<<<numBlocks, numThreadsPerBlock,
         clusterBlockSharedDataSize>>>(
           deviceObjs,
@@ -142,10 +166,9 @@ void kde2D(
           sigma, // sigma coeff
           deviceIntermediates
           );
-      if (numBlocks > 1) {
-        reduce<<<1, numReductionThreads, reductionSharedDataSize>>>(
-            deviceIntermediates);
-      }
+      // reduceSeq<<<1,1>>>(deviceIntermediates, numBlocks);
+      reduce<<<1, numReductionThreads, reductionSharedDataSize>>>(
+          deviceIntermediates);
       densityMap[i][j] = getFirstDeviceValue(deviceIntermediates);
     }
   }
