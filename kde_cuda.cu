@@ -177,6 +177,12 @@ void kde2DParallelObject(
   const int numReductionThreads = nextPowerOfTwo(numBlocks);
   const int reductionSharedDataSize = numReductionThreads * sizeof(float);
 
+#ifdef DEBUG
+  cout << "numThreadsPerBlock: " << numThreadsPerBlock << "\n"
+       << "numBlocks: " << numBlocks << "\n"
+       << "numReductionThreads: " << numReductionThreads
+       << endl;
+#endif
   assert(numReductionThreads <= 1024);
 
   float *deviceIntermediates;
