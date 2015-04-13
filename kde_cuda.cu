@@ -208,7 +208,7 @@ void kde2DParallelObject(
       // reduceSeq<<<1,1>>>(deviceIntermediates, numBlocks);
       reduce<<<1, numReductionThreads, reductionSharedDataSize>>>(
           deviceIntermediates);
-      densityMap[i][j] = getFirstDeviceValue(deviceIntermediates);
+      densityMap[i][j] = getFirstDeviceValue(deviceIntermediates) / numObjs;
     }
   }
   cudaFree(deviceObjs);
@@ -238,6 +238,22 @@ void updateDensityMap(
         x,y);
   }
 }
+
+__global__ static
+void mapNormalize(
+    int width, int height,
+    int numObjs,
+    float *deviceDensityMap) {
+  int mapCoordIdx = blockDim.x * blockIdx.x + threadIdx.x;
+
+  int i = mapCoordIdx / height;
+  int j = mapCoordIdx % height;
+  if (i < width) {
+    deviceDensityMap[mapCoordIdx] /= (float)numObjs;
+  }
+}
+
+
 
 void kde2DParallelMap(
     float **objCoords,
@@ -275,6 +291,7 @@ void kde2DParallelMap(
         sigma,
         deviceDensityMap);
   }
+  mapNormalize<<<numBlocks, numThreadsPerBlock>>>(width, height, numObjs, deviceDensityMap);
   cudaMemcpy(densityMap[0], deviceDensityMap, width*height*sizeof(float),
       cudaMemcpyDeviceToHost);
   cudaFree(deviceDensityMap);
