@@ -238,7 +238,7 @@ void kde2DParallelMap(
   cudaMalloc(&deviceDensityMap, width * height * sizeof(float));
   cudaMemset(deviceDensityMap, 0, width * height * sizeof(float));
 
-  const int numThreadsPerBlock = 128;
+  const int numThreadsPerBlock = 1024;
   const int numBlocks = int(std::ceil((float)(width * height) / (float)numThreadsPerBlock));
   for (int i = 0; i < numObjs; i++) {
     /*
@@ -271,7 +271,9 @@ void kde2D(
     int height, // 768
     float sigma) {
   if (width * height > numObjs) {
-    cout << "parallel map" << endl;
+#ifdef DEBUG
+    cout << "Parallel Map Update" << endl;
+#endif
     kde2DParallelMap(
         objCoords,
         numObjs,
@@ -280,7 +282,9 @@ void kde2D(
         height,
         sigma);
   } else {
-    cout << "parallel obj" << endl;
+#ifdef DEBUG
+    cout << "Parallel Obj Update" << endl;
+#endif
     kde2DParallelObject(
         objCoords,
         numObjs,
