@@ -3,6 +3,7 @@
 #include <cstdlib>
 #include <cstdio>
 #include "kde.h"
+#include "config.h"
 
 using namespace std;
 
@@ -13,6 +14,7 @@ static void usage(char *argv0) {
       "       -s sigma[default=0.1]     : bandwidth for kernel density estimation\n"
       "       -w width[default=800]     : width of density map\n"
       "       -h height[default=800]    : height of density map\n"
+      "       -p parallel[default=0]    : Parallel Method. AUTO(%d), MAP(1), OBJECT(2)\n"
       "       -o output                 : output file name of density map\n";
   fprintf(stderr, help, argv0);
   exit(-1);
@@ -25,7 +27,8 @@ int main(int argc, char **argv) {
   float sigma = 0.1;
   double timing, io_timing, kde_timing;
   int width = 800, height = 800;
-  while ( (opt=getopt(argc,argv,"i:s:w:h:o:") ) != EOF ) {
+  int parallel_method = PARALLEL_AUTO;
+  while ( (opt=getopt(argc,argv,"i:s:w:h:p:o:") ) != EOF ) {
     switch (opt) {
       case 'i':
         input_fname=optarg;
@@ -42,6 +45,9 @@ int main(int argc, char **argv) {
       case 'o':
         output_fname = optarg;
         break;
+      case 'p':
+        parallel_method = atoi(optarg);
+        break;
       case '?':
         usage(argv[0]);
         break;
@@ -54,6 +60,8 @@ int main(int argc, char **argv) {
   if (input_fname == 0 || output_fname == 0 || sigma <= 0 || width <= 0 || height <= 0) {
     usage(argv[0]);
   }
+
+  setParallelMethod(parallel_method);
 
   io_timing = wtime();
 

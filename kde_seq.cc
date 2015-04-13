@@ -3,6 +3,10 @@
 #include <cmath>
 #include "config.h"
 
+static int parallel_method = PARALLEL_AUTO;
+void setParallelMethod(int method) {
+  parallel_method = method;
+}
 
 float gauss2d(float center_x, float center_y, float sigma, float x, float y) {
   float sigma_square = sigma * sigma;

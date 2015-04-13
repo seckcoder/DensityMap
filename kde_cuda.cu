@@ -5,6 +5,13 @@
 using std::cout;
 using std::endl;
 
+
+
+static int parallel_method = PARALLEL_AUTO;
+void setParallelMethod(int method) {
+  parallel_method = method;
+}
+
 static inline int nextPowerOfTwo(int n) {
     n--;
 
@@ -162,7 +169,7 @@ void kde2DParallelObject(
   cudaMalloc(&deviceObjs, numObjs * 2 * sizeof(float));
   cudaMemcpy(deviceObjs, objCoords[0], numObjs * 2 * sizeof(float), cudaMemcpyHostToDevice);
 
-  const int numThreadsPerBlock = 1024;
+  const int numThreadsPerBlock = 128;
   const int numBlocks = int(std::ceil((float)numObjs / (float)numThreadsPerBlock));
   const int clusterBlockSharedDataSize = numThreadsPerBlock * sizeof(float);
 
@@ -238,8 +245,12 @@ void kde2DParallelMap(
   cudaMalloc(&deviceDensityMap, width * height * sizeof(float));
   cudaMemset(deviceDensityMap, 0, width * height * sizeof(float));
 
-  const int numThreadsPerBlock = 1024;
+  const int numThreadsPerBlock = 128;
   const int numBlocks = int(std::ceil((float)(width * height) / (float)numThreadsPerBlock));
+#ifdef DEBUG
+  cout << "numThreadsPerBlock: " << numThreadsPerBlock << endl;
+  cout << "numBlocks: " << numBlocks << endl;
+#endif
   for (int i = 0; i < numObjs; i++) {
     /*
     updateDensityMapSeq<<<1,1>>>(
@@ -270,7 +281,8 @@ void kde2D(
     int width,  // 1024
     int height, // 768
     float sigma) {
-  if (width * height > numObjs) {
+  if ((parallel_method == PARALLEL_AUTO && width * height > numObjs) ||
+      (parallel_method == PARALLEL_MAP)) {
 #ifdef DEBUG
     cout << "Parallel Map Update" << endl;
 #endif

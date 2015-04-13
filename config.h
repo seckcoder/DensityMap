@@ -4,4 +4,8 @@
 #define PI 3.1415926f
 #define DEBUG
 
+#define PARALLEL_AUTO 0
+#define PARALLEL_MAP 1
+#define PARALLEL_OBJECT 2
+
 #endif

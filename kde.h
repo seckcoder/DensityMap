@@ -34,5 +34,6 @@ void kde2D(
     int width,
     int height,
     float sigma);
+void setParallelMethod(int method);
 
 #endif
