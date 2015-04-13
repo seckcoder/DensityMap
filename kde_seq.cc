@@ -33,7 +33,7 @@ float estimateCoord(
         x,y // density map coord
         );
   }
-  return estimate;
+  return estimate / numObjs;
 }
 
 // 2 dimensional kernel density estimation
