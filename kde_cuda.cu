@@ -26,11 +26,11 @@ inline T getFirstDeviceValue(T *device_arr) {
 }
 
 __device__ inline static
-float gauss2d(float center_x, float center_y, float sigma, float x, float y) {
+float gauss2d(float centerX, float centerY, float sigma, float x, float y) {
   float sigma_square = sigma * sigma;
   float sigma_square_inv = 1.f / sigma_square;
-  float delta_x = x - center_x,
-        delta_y = y - center_y;
+  float delta_x = x - centerX,
+        delta_y = y - centerY;
 
   return 1.f/(2.f*PI*sigma_square) * exp(-0.5f * sigma_square_inv * (delta_x*delta_x + delta_y * delta_y));
 }
@@ -42,13 +42,13 @@ __global__ static
 void estimateCoordSeq(
     float *objCoords,
     int numObjs,
-    float center_x,
-    float center_y,
+    float centerX,
+    float centerY,
     float sigma,
     float *estimate_block_acc) {
   float estimate = 0.f;
   for (int i = 0; i < numObjs; i++) {
-    estimate += gauss2d(center_x,center_y,sigma,objCoords[i*2],objCoords[i*2+1]);
+    estimate += gauss2d(centerX,centerY,sigma,objCoords[i*2],objCoords[i*2+1]);
   }
   estimate_block_acc[0] = estimate;
 }
@@ -78,10 +78,10 @@ __global__ static
 void estimateCoord(
     float *objCoords,
     int numObjs,
-    float center_x,
-    float center_y,
+    float centerX,
+    float centerY,
     float sigma,
-    float *estimates_block_acc) {
+    float *estimatesBlockAcc) {
   extern __shared__ float gauss_estimates[];
   int objectId = blockDim.x * blockIdx.x + threadIdx.x;
   // initialize shared memory
@@ -89,7 +89,7 @@ void estimateCoord(
   if (objectId < numObjs) {
     float x = objCoords[objectId*2],
           y = objCoords[objectId*2+1];
-    gauss_estimates[threadIdx.x] = gauss2d(center_x, center_y, sigma, x, y);
+    gauss_estimates[threadIdx.x] = gauss2d(centerX, centerY, sigma, x, y);
   }
   __syncthreads();
   // reduction
@@ -100,7 +100,7 @@ void estimateCoord(
     __syncthreads();
   }
   if (threadIdx.x == 0) {
-    estimates_block_acc[blockIdx.x] = gauss_estimates[0];
+    estimatesBlockAcc[blockIdx.x] = gauss_estimates[0];
   }
 }
 
@@ -125,6 +125,32 @@ void reduce(float *array) {
 }
 
 void kde2D(
+    float **objCoords,
+    int numObjs,  // 10 - 100000
+    float **densityMap,
+    int width,  // 1024
+    int height, // 768
+    float sigma) {
+  if (width * height > numObjs) {
+    kde2DParallelMap(
+        objCoords,
+        numObjs,
+        densityMap,
+        width,
+        height,
+        sigma);
+  } else {
+    kde2DParallelObject(
+        objCoords,
+        numObjs,
+        densityMap,
+        width,
+        height,
+        sigma);
+  }
+}
+
+void kde2DParallelObject(
     float **objCoords,
     int numObjs,  // 10 - 100000
     float **densityMap,
@@ -174,4 +200,47 @@ void kde2D(
   }
   cudaFree(deviceObjs);
   cudaFree(deviceIntermediates);
+}
+
+
+__global__ static
+void updateDensityMap(
+    float objCoord[2],
+    int width,
+    int height,
+    float sigma,
+    float *deviceDensityMap) {
+  int mapCoordIdx = blockDim.x * blockIdx.x + threadIdx.x;
+  
+  int centerX = mapCoordIx / height;
+  int centerY = mapCoordIdx % height;
+  deviceDensityMap[map_coord_idx] += gauss2d(
+      centerX, centerY, sigma, objCoord[0], objCoord[1]);
+}
+
+void kde2DParallelMap(
+    float **objCoords,
+    int numObjs,
+    float **densityMap,
+    int width,
+    int height,
+    float sigma) {
+
+  float *deviceDensityMap;
+  cudaMalloc(&deviceDensityMap, width * height * sizeof(float));
+  cudaMemset(deviceDensityMap, 0, width * height * sizeof(float));
+
+  const int numThreadsPerBlock = 1024;
+  const int numBlocks = int(std::ceil((float)(width * height) / (float)numThreadsPerBlock));
+  for (int i = 0; i < numObjs; i++) {
+    updateDensityMap<<<numBlocks, numThreadsPerBlock>>>(
+        objCoords[i],
+        width,
+        height,
+        sigma
+        deviceDensityMap);
+  }
+  cudaMemcpy(densityMap[0], deviceDensityMap, width*height*sizeof(float),
+      cudaMemcpyDeviceToHost);
+  cudaFree(deviceDensityMap);
 }
