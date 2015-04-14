@@ -350,6 +350,22 @@ void kde2DParallelMap(
   cudaFree(deviceDensityMap);
 }
 
+/*
+ * Using fitted shared memory. That is,
+ * use the same size of shared memory
+ * as block size.
+ * 
+ * In theory, if we increase number of
+ * threads for each block, there should
+ * be speedup since number of read
+ * from global memory(deviceObjs) is
+ * reduced.
+ * But in pracice, we get max performance
+ * for 512 number of threads per block.
+ * And the speed up from 128 to 512 is not
+ * apparent.
+ *
+ */
 
 __global__ static
 void sharedFitMemParallelKDE(
@@ -370,11 +386,13 @@ void sharedFitMemParallelKDE(
   int numLoops = numObjs / blockDim.x;
   // assume sharedMemSize is a multiple of blockDim.x
   for (int i = 0; i < numLoops; i += 1) {
-    // copy the ith block of mem from deviceObjs
+    // copy the ith block of mem from deviceObjs to
+    // shared memory
     int coordIdx = i * blockDim.x + threadIdx.x;
     sharedMem[2*threadIdx.x] = deviceObjs[coordIdx * 2];
     sharedMem[2*threadIdx.x+1] = deviceObjs[coordIdx * 2+1];
     __syncthreads();
+    // computation for the ith block
     for (int j = 0; j < blockDim.x; j++) {
       estimate += gauss2d(
           sharedMem[2*j], sharedMem[2*j+1], // center
@@ -409,6 +427,20 @@ void sharedFitMemParallelKDE(
   }
 }
 
+/*
+ * sharedMaxMemParallelKDE use a large trunk of
+ * shared Memory and load the shared Memory
+ * for each block of threads.
+ *
+ * In theory, this should not be faster than
+ * the fitted version since it won't reduce
+ * data read from global memory.
+ * In practice, we find it to be 4 times slower
+ * than the fitted version.
+ * This version can still be optimized since
+ * the read from global memory and write
+ * to shared memory is not coalesced.
+ */
 __global__ static
 void sharedMaxMemParallelKDE(
     float *deviceObjs,
@@ -502,7 +534,7 @@ void kde2DParallelMapSharedMem(
     float **densityMap
     ) {
 
-  const int numThreadsPerBlock = 128;
+  const int numThreadsPerBlock = 512;
   const int numBlocks = ceilDivide(width * height,numThreadsPerBlock);
   float *deviceDensityMap;
   cudaMalloc(&deviceDensityMap, width * height * sizeof(float));

@@ -7,17 +7,16 @@ H_FILES = kde.h config.h
 # ----
 #  SEQ
 
-OPTFLAGS  = -g
-INCFLAGS = -I.
+OPTFLAGS  = -O3
+INCFLAGS = -I .
 CFLAGS = $(OPTFLAGS) $(INCFLAGS)
 LDFLAGS = $(OPTFLAGS)
 LIBS =
 
 CPP = g++
 
-.c.o:
-	$(CC) $(CFLAGS) -c $<
-
+%.o: %.cc
+	$(CPP) $(CFLAGS) -c $<
 SEQ_SRC = kde_seq.cc main.cc file_io.cc wtime.cc
 
 SEQ_OBJ = $(SEQ_SRC:%.cc=%.o)
