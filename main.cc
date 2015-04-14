@@ -3,12 +3,20 @@
 #include <cstdlib>
 #include <cstdio>
 #include "kde.h"
+#include "config.h"
 
 using namespace std;
 
 static void usage(char *argv0) {
-  // TODO: usage
-  printf("Usage:...\n");
+  const char *help =
+      "Usage: %s [switches] -i filename\n"
+      "       -i filename               : file containing 2D data used to generate density map\n"
+      "       -s sigma[default=0.1]     : bandwidth for kernel density estimation\n"
+      "       -w width[default=800]     : width of density map\n"
+      "       -h height[default=800]    : height of density map\n"
+      "       -p parallel[default=0]    : Parallel Method. AUTO(%d), MAP(1), OBJECT(2), MAP_SHARED(3)\n"
+      "       -o output                 : output file name of density map\n";
+  fprintf(stderr, help, argv0);
   exit(-1);
 }
 
@@ -16,10 +24,11 @@ int main(int argc, char **argv) {
   int opt;
   char *input_fname;
   char *output_fname;
-  float sigma = 0;
+  float sigma = 0.1;
   double timing, io_timing, kde_timing;
-  int width = 0, height = 0;
-  while ( (opt=getopt(argc,argv,"i:s:w:h:o:")) != EOF ) {
+  int width = 800, height = 800;
+  int parallel_method = PARALLEL_AUTO;
+  while ( (opt=getopt(argc,argv,"i:s:w:h:p:o:") ) != EOF ) {
     switch (opt) {
       case 'i':
         input_fname=optarg;
@@ -36,6 +45,9 @@ int main(int argc, char **argv) {
       case 'o':
         output_fname = optarg;
         break;
+      case 'p':
+        parallel_method = atoi(optarg);
+        break;
       case '?':
         usage(argv[0]);
         break;
@@ -48,6 +60,8 @@ int main(int argc, char **argv) {
   if (input_fname == 0 || output_fname == 0 || sigma <= 0 || width <= 0 || height <= 0) {
     usage(argv[0]);
   }
+
+  setParallelMethod(parallel_method);
 
   io_timing = wtime();
 
@@ -62,7 +76,7 @@ int main(int argc, char **argv) {
 
   kde_timing = wtime();
 
-  kde2D(objCoords, numObjs, densityMap, width, height, sigma);
+  kde2D(objCoords, numObjs, width, height, sigma, densityMap);
 
   kde_timing = wtime() - kde_timing;
 

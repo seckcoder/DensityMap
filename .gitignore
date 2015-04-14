@@ -1,3 +1,8 @@
-seq_main
-*.swp
 seq_main.dSYM/
+data
+output
+seq_output
+*.o
+*.swp
+seq_main
+cuda_main

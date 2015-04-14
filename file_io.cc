@@ -9,7 +9,7 @@ using std::vector;
 using std::ofstream;
 
 void loadtxt(const string &filename, float **&objCoords, int &numObjs) {
-  ifstream ifs(filename, std::ifstream::in);
+  ifstream ifs(filename.c_str(), std::ifstream::in);
   vector<std::pair<float,float> > vecCoords;
   while (true) {
     float x,y;
@@ -27,7 +27,7 @@ void loadtxt(const string &filename, float **&objCoords, int &numObjs) {
 }
 
 void savetxt(const string &filename, float **densityMap, int width, int height) {
-  ofstream ofs(filename, std::ofstream::out);
+  ofstream ofs(filename.c_str(), std::ofstream::out);
   // TODO: save density map
   for (int i = 0; i < width; i++) {
     for (int j = 0; j < height; j++) {
