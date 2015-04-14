@@ -24,17 +24,6 @@
 #define msg(format, ...) do { fprintf(stderr, format, ##__VA_ARGS__); } while (0)
 #define err(format, ...) do { fprintf(stderr, format, ##__VA_ARGS__); exit(1); } while (0)
 
-inline void checkCuda(cudaError_t e) {
-      if (e != cudaSuccess) {
-        err("CUDA Error: %s\n", cudaGetErrorString(e));
-      }
-}
-
-inline void checkLastCudaError() {
-      checkCuda(cudaGetLastError());
-}
-
-
 double wtime(void);
 
 

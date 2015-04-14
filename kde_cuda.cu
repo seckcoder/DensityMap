@@ -2,7 +2,7 @@
 #include <iostream>
 #include <cassert>
 #include "config.h"
-#include "kde.h"
+#include "cuda_util.h"
 using std::cout;
 using std::endl;
 
@@ -205,13 +205,15 @@ void reduce(float *array) {
 
 
 
+static
 void kde2DParallelObject(
     float **objCoords,
     int numObjs,  // 10 - 100000
-    float **densityMap,
     int width,  // 1024
     int height, // 768
-    float sigma) {
+    float sigma,
+    float **densityMap
+    ) {
   
   float *deviceObjs;
   cudaMalloc(&deviceObjs, numObjs * 2 * sizeof(float));
@@ -302,13 +304,15 @@ void mapNormalize(
 
 
 
+static
 void kde2DParallelMap(
     float **objCoords,
     int numObjs,
-    float **densityMap,
     int width,
     int height,
-    float sigma) {
+    float sigma,
+    float **densityMap
+    ) {
 
   float *deviceDensityMap;
   cudaMalloc(&deviceDensityMap, width * height * sizeof(float));
@@ -403,7 +407,7 @@ void sharedMemParallelKDE(
 }
 
 static
-void kde2DSharedMem1(
+void kde2DParallelMapSharedMem(
     float **objCoords,
     int numObjs,
     int width,
@@ -425,7 +429,6 @@ void kde2DSharedMem1(
   cout << "numThreadsPerBlock: " << numThreadsPerBlock << "\n"
        << "numBlocks: " << numBlocks << endl;
 #endif
-#if 1
   sharedMemParallelKDE<<<numBlocks, numThreadsPerBlock, sharedMemSize>>>(
       deviceObjs,
       numObjs,
@@ -433,16 +436,6 @@ void kde2DSharedMem1(
       height,
       sigma,
       deviceDensityMap);
-#endif
-#if 0
-  sharedMemSeqKDE<<<numBlocks, numThreadsPerBlock, sharedMemSize>>>(
-      deviceObjs,
-      numObjs,
-      width,
-      height,
-      sigma,
-      deviceDensityMap);
-#endif
   cudaThreadSynchronize(); checkLastCudaError();
   cudaMemcpy(densityMap[0], deviceDensityMap,
              width * height * sizeof(float),
@@ -459,16 +452,21 @@ void kde2D(
     float sigma,
     float **densityMap
     ) {
-  kde2DSharedMem1(
-      objCoords,
-      numObjs,
-      width,
-      height,
-      sigma,
-      densityMap
-      );
-#if 0
-  if ((parallel_method == PARALLEL_AUTO && width * height > numObjs) ||
+
+  if (parallel_method == PARALLEL_MAP_SHARED_MEM) {
+#ifdef DEBUG
+    cout << "Parallel Map Update with shared memory for"
+        " objectCoords" << endl;
+#endif
+    kde2DParallelMapSharedMem(
+        objCoords,
+        numObjs,
+        width,
+        height,
+        sigma,
+        densityMap
+        );
+  } else if ((parallel_method == PARALLEL_AUTO && width * height > numObjs) ||
       (parallel_method == PARALLEL_MAP)) {
 #ifdef DEBUG
     cout << "Parallel Map Update" << endl;
@@ -481,7 +479,8 @@ void kde2D(
         sigma,
         densityMap
         );
-  } else {
+  } else if ((parallel_method == PARALLEL_AUTO && width * height < numObjs) ||
+             (parallel_method == PARALLEL_OBJECT)) {
 #ifdef DEBUG
     cout << "Parallel Obj Update" << endl;
 #endif
@@ -493,6 +492,7 @@ void kde2D(
         sigma,
         densityMap
         );
+  } else {
+    err("UNKNOWN METHOD: %d", parallel_method);
   }
-#endif
 }
