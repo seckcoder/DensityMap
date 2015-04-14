@@ -6,6 +6,8 @@
 using std::cout;
 using std::endl;
 
+#undef MAX_SHARED_MEM
+// #define MAX_SHARED_MEM
 
 
 static int parallel_method = PARALLEL_AUTO;
@@ -407,7 +409,6 @@ void sharedFitMemParallelKDE(
   }
 }
 
-
 __global__ static
 void sharedMaxMemParallelKDE(
     float *deviceObjs,
@@ -415,6 +416,7 @@ void sharedMaxMemParallelKDE(
     int width,
     int height,
     float sigma,
+    const int numBlocksPerSharedBlock,
     float *deviceDensityMap) {
   extern __shared__ float sharedMem[];
   const int mapCoordIdx = blockDim.x * blockIdx.x + threadIdx.x;
@@ -424,8 +426,6 @@ void sharedMaxMemParallelKDE(
   const float mapCoordY = float(mapCoordJ) / float(height-1);
   float estimate = 0.f;
   const int numObjsPerBlock = blockDim.x;
-  // TODO: modify this
-  const int numBlocksPerSharedBlock = 40;
   const int numObjsPerSharedBlock = numBlocksPerSharedBlock * numObjsPerBlock;
   const int numSharedBlocks = numObjs / numObjsPerSharedBlock;
   int numObjsInLastSharedBlock = numObjs % numObjsPerSharedBlock;
@@ -509,7 +509,8 @@ void kde2DParallelMapSharedMem(
   float *deviceObjs;
   cudaMalloc(&deviceObjs, numObjs * 2 * sizeof(float));
   cudaMemcpy(deviceObjs, objCoords[0], numObjs * 2 * sizeof(float), cudaMemcpyHostToDevice);
-  const size_t sharedMemSize = numThreadsPerBlock * 2 * sizeof(float);
+
+
 
 #ifdef DEBUG
   cout << "numThreadsPerBlock: " << numThreadsPerBlock << "\n"
@@ -518,19 +519,31 @@ void kde2DParallelMapSharedMem(
 
 #ifdef MAX_SHARED_MEM
   msg("Maximize shared memory used\n");
-  #define sharedMemParallelKDE sharedMaxMemParallelKDE
+  /*
+   * TODO: modify this
+   */
+  const int numBlocksPerSharedBlock = 40;
+  const size_t sharedMemSize = numBlocksPerSharedBlock * numThreadsPerBlock * 2 * sizeof(float);
+  sharedMaxMemParallelKDE<<<numBlocks, numThreadsPerBlock,
+      sharedMemSize>>>(
+      deviceObjs,
+      numObjs,
+      width,
+      height,
+      sigma,
+      numBlocksPerSharedBlock,
+      deviceDensityMap);
 #else
-  #define sharedMemParallelKDE sharedFitMemParallelKDE
-#endif
-
-
-  sharedMemParallelKDE<<<numBlocks, numThreadsPerBlock, sharedMemSize>>>(
+  const size_t sharedMemSize = numThreadsPerBlock * 2 * sizeof(float);
+  sharedFitMemParallelKDE<<<numBlocks, numThreadsPerBlock, sharedMemSize>>>(
       deviceObjs,
       numObjs,
       width,
       height,
       sigma,
       deviceDensityMap);
+#endif
+
   cudaThreadSynchronize(); checkLastCudaError();
   cudaMemcpy(densityMap[0], deviceDensityMap,
              width * height * sizeof(float),

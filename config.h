@@ -3,7 +3,6 @@
 
 #define PI 3.1415926f
 #define DEBUG
-#define MAX_SHARED_MEM
 
 #define PARALLEL_AUTO 0
 #define PARALLEL_MAP 1
