@@ -368,7 +368,7 @@ void kde2DParallelMap(
  */
 
 __global__ static
-void sharedFitMemParallelKDE(
+void sharedFitMemParallelMap(
     float *deviceObjs,
     int numObjs,
     int width,
@@ -428,7 +428,7 @@ void sharedFitMemParallelKDE(
 }
 
 /*
- * sharedMaxMemParallelKDE use a large trunk of
+ * sharedMaxMemParallelMap use a large trunk of
  * shared Memory and load the shared Memory
  * for each block of threads.
  *
@@ -442,7 +442,7 @@ void sharedFitMemParallelKDE(
  * to shared memory is not coalesced.
  */
 __global__ static
-void sharedMaxMemParallelKDE(
+void sharedMaxMemParallelMap(
     float *deviceObjs,
     int numObjs,
     int width,
@@ -556,7 +556,7 @@ void kde2DParallelMapSharedMem(
    */
   const int numBlocksPerSharedBlock = 40;
   const size_t sharedMemSize = numBlocksPerSharedBlock * numThreadsPerBlock * 2 * sizeof(float);
-  sharedMaxMemParallelKDE<<<numBlocks, numThreadsPerBlock,
+  sharedMaxMemParallelMap<<<numBlocks, numThreadsPerBlock,
       sharedMemSize>>>(
       deviceObjs,
       numObjs,
@@ -567,7 +567,7 @@ void kde2DParallelMapSharedMem(
       deviceDensityMap);
 #else
   const size_t sharedMemSize = numThreadsPerBlock * 2 * sizeof(float);
-  sharedFitMemParallelKDE<<<numBlocks, numThreadsPerBlock, sharedMemSize>>>(
+  sharedFitMemParallelMap<<<numBlocks, numThreadsPerBlock, sharedMemSize>>>(
       deviceObjs,
       numObjs,
       width,
@@ -576,6 +576,46 @@ void kde2DParallelMapSharedMem(
       deviceDensityMap);
 #endif
 
+  cudaThreadSynchronize(); checkLastCudaError();
+  cudaMemcpy(densityMap[0], deviceDensityMap,
+             width * height * sizeof(float),
+             cudaMemcpyDeviceToHost);
+  cudaFree(deviceDensityMap);
+  cudaFree(deviceObjs);
+}
+
+static
+void kde2DParallelObjectSharedMem(
+    float **objCoords,
+    int numObjs,
+    int width,
+    int height,
+    float sigma,
+    float **densityMap) {
+  const int numThreadsPerBlock = 128;
+  const int numBlocks = ceilDivide(numObjs,
+                                   numThreadsPerBlock);
+  float *deviceDensityMap;
+  cudaMalloc(&deviceDensityMap, width * height * sizeof(float));
+  float *deviceObjs;
+  cudaMalloc(&deviceObjs, numObjs * 2 * sizeof(float));
+  cudaMemcpy(deviceObjs, objCoords[0], numObjs * 2 * sizeof(float), cudaMemcpyHostToDevice);
+
+#ifdef DEBUG
+  cout << "numThreadsPerBlock: " << numThreadsPerBlock << "\n"
+       << "numBlocks: " << numBlocks << endl;
+#endif
+
+  sharedMemParallelObject<<<
+      numBlocks,
+      numThreadsPerBlock,
+      sharedMemSize>>>(
+          deviceObjs,
+          numObjs,
+          width,
+          height,
+          sigma,
+          deviceDensityMap);
   cudaThreadSynchronize(); checkLastCudaError();
   cudaMemcpy(densityMap[0], deviceDensityMap,
              width * height * sizeof(float),
