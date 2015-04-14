@@ -350,13 +350,14 @@ void kde2DParallelMap(
 
 
 __global__ static
-void sharedMemParallelKDE(
+void sharedFitMemParallelKDE(
     float *deviceObjs,
     int numObjs,
     int width,
     int height,
     float sigma,
     float *deviceDensityMap) {
+  
   extern __shared__ float sharedMem[];
   int mapCoordIdx = blockDim.x * blockIdx.x + threadIdx.x;
   int mapCoordI = mapCoordIdx / height;
@@ -406,6 +407,91 @@ void sharedMemParallelKDE(
   }
 }
 
+
+__global__ static
+void sharedMaxMemParallelKDE(
+    float *deviceObjs,
+    int numObjs,
+    int width,
+    int height,
+    float sigma,
+    float *deviceDensityMap) {
+  extern __shared__ float sharedMem[];
+
+/* Unprotected macro, use it carefully.
+ * I intentionally omit the argument, which makes it less readable
+ * but more maintainable since it will report errors if used in
+ * the wrong place.
+ * I don't use inline method here since it's cubersome to pass
+ * all these arguments around.
+ */
+
+#define loadObject() {\
+    sharedMem[2*sharedObjectIdx] = deviceObjs[2*objectIdx];\
+    sharedMem[2*sharedObjectIdx+1] = deviceObjs[2*objectIdx+1];\
+  }
+#define loadBlock() {\
+    int sharedObjectIdx = blkIdx * numObjsPerBlock + threadIdx.x;\
+    int objectIdx = sharedBlockIdx * numObjsPerSharedBlock +\
+      sharedObjectIdx;\
+    loadObject();\
+  }
+#define loadSharedBlock() {\
+    for (int blkIdx = 0; blkIdx < numBlocksPerSharedBlock; blkIdx+=1) {\
+      loadBlock();\
+    }\
+  }
+#define reduceSharedMem(size) {\
+  for (int __i__ = 0; __i__ < (size); __i__ += 1) {\
+    estimate += gauss2d(sharedMem[2*__i__], sharedMem[2*__i__+1],\
+        sigma, mapCoordX, mapCoordY);\
+  }
+
+  const int mapCoordIdx = blockDim.x * blockIdx.x + threadIdx.x;
+  const int mapCoordI = mapCoordIdx / height;
+  const int mapCoordJ = mapCoordIdx % height;
+  const float mapCoordX = float(mapCoordI) / float(width-1);
+  const float mapCoordY = float(mapCoordJ) / float(height-1);
+  float estimate = 0.f;
+  const int numObjsPerblock = blockDim.x;
+  // TODO: modify this
+  const int numBlocksPerSharedBlock = 40;
+  const int numSharedBlocks = numObjs / numObjsPerSharedBlock;
+  int numObjsInLastSharedBlock = numObjs % numObjsPerSharedBlock;
+  const int numBlocksInLastSharedBlock = numObjsInLastSharedBlock / numObjsPerBlock;
+  const int numObjsInLastBlock = numObjsInLastSharedBlock % numObjsPerBlock;
+  
+  for (int sharedBlockIdx = 0;
+      sharedBlockIdx < numSharedBlocks;
+      sharedBlockIDx++) {
+    loadSharedBlock();
+    __syncthreads();
+    estimate += reduceSharedMem(numObjsPerSharedBlock);
+  }
+
+  int lastSharedBlockIdx = numSharedBlocks;
+  for (int blkIdx = 0; blkIdx < numBlocksInLastSharedBlock; blkIdx++) {
+    loadBlock(lastSharedBlockIdx, blkIdx);
+  }
+  int lastBlkIdx = numBlocksInLastSharedBlock;
+  for (int blkObjIdx = 0; blkObjIdx < numObjsInLastBlock; blkObjIdx++) {
+    int sharedObjectIdx = lastBlkIdx * numObjsPerBlock + threadIdx.x;
+    int objectIdx = lastSharedBlockIDx * numObjsPerSharedBlock +
+      sharedObjectIdx;
+    loadObject();
+  }
+  __syncThreads();
+  estiimate += reduceSharedMem(numObjsInLastSharedBlock);
+  if (mapCoordIdx < width * height) {
+    deviceDensityMap[mapCoordIdx] = estimate / numObjs;
+  }
+}
+
+#ifdef MAX_SHARED_MEM
+  #define sharedMemParallelKDE sharedMaxMemParallelKDE
+#elif
+  #define sharedMemParallelKDE sharedFitMemParallelKDE
+#endif
 static
 void kde2DParallelMapSharedMem(
     float **objCoords,
