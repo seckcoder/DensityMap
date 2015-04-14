@@ -419,9 +419,12 @@ void sharedMaxMemParallelKDE(
   extern __shared__ float sharedMem[];
 
 /* Unprotected macro, use it carefully.
- * I intentionally omit the argument, which makes it less readable
- * but more maintainable since it will report errors if used in
- * the wrong place.
+ * The meaning of following macro is to make writing and reading
+ * he following code easier by spliting the logic into
+ * several independent parts.
+ * I intentionally omit the argument, which makes it a little
+ * confusing but more maintainable since it will report errors
+ * if used in the wrong place.
  * I don't use inline method here since it's cubersome to pass
  * all these arguments around.
  */
@@ -471,7 +474,7 @@ void sharedMaxMemParallelKDE(
 
   int lastSharedBlockIdx = numSharedBlocks;
   for (int blkIdx = 0; blkIdx < numBlocksInLastSharedBlock; blkIdx++) {
-    loadBlock(lastSharedBlockIdx, blkIdx);
+    loadBlock();
   }
   int lastBlkIdx = numBlocksInLastSharedBlock;
   for (int blkObjIdx = 0; blkObjIdx < numObjsInLastBlock; blkObjIdx++) {
