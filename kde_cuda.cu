@@ -2,6 +2,7 @@
 #include <iostream>
 #include <cassert>
 #include "config.h"
+#include "kde.h"
 using std::cout;
 using std::endl;
 
@@ -30,6 +31,10 @@ inline T getFirstDeviceValue(T *device_arr) {
   T ans;
   cudaMemcpy(&ans, device_arr, sizeof(T), cudaMemcpyDeviceToHost);
   return ans;
+}
+
+inline int ceilDivide(int a, int b) {
+  return int(std::ceil((float)a / (float) b));
 }
 
 __host__ __device__ inline static
@@ -103,6 +108,49 @@ void updateDensityMapSeq(
   }
 }
 
+__global__ static
+void sharedMemSeqKDE(
+    float *deviceObjs,
+    int numObjs,
+    int width,
+    int height,
+    float sigma,
+    float *deviceDensityMap) {
+  extern __shared__ char mem[];
+  float *sharedMem = (float *)mem;
+
+  int mapCoordIdx = blockDim.x * blockIdx.x + threadIdx.x;
+  int mapCoordI = mapCoordIdx / height;
+  int mapCoordJ = mapCoordIdx % height;
+  int objectIdx = threadIdx.x;
+  /* Note: No matter mapCoordI < width or > width,
+   * we should copy the whole block of deviceObjs.
+   * Otherwise, there will be error
+   */
+  if (objectIdx < numObjs) {
+    sharedMem[2*threadIdx.x] = deviceObjs[objectIdx * 2];
+    sharedMem[2*threadIdx.x + 1] = deviceObjs[objectIdx * 2 + 1];
+  }
+  __syncthreads();
+  if (mapCoordI < width) {
+    float mapCoordX = float(mapCoordI) / float(width-1);
+    float mapCoordY = float(mapCoordJ) / float(height-1);
+    float estimate = 0.f;
+
+    for (int j = 0; j < numObjs; j++) {
+      estimate += gauss2d(
+          // deviceObjs[2*j],
+          // deviceObjs[2*j+1],
+          sharedMem[2*j],
+          sharedMem[2*j+1],
+          sigma,
+          mapCoordX,
+          mapCoordY);
+    }
+    deviceDensityMap[mapCoordIdx] = estimate / numObjs;
+  }
+}
+
 #endif
 
 __global__ static
@@ -170,7 +218,7 @@ void kde2DParallelObject(
   cudaMemcpy(deviceObjs, objCoords[0], numObjs * 2 * sizeof(float), cudaMemcpyHostToDevice);
 
   const int numThreadsPerBlock = 128;
-  const int numBlocks = int(std::ceil((float)numObjs / (float)numThreadsPerBlock));
+  const int numBlocks = ceilDivide(numObjs, numThreadsPerBlock);
   const int clusterBlockSharedDataSize = numThreadsPerBlock * sizeof(float);
 
   // for reduction
@@ -247,7 +295,6 @@ void mapNormalize(
   int mapCoordIdx = blockDim.x * blockIdx.x + threadIdx.x;
 
   int i = mapCoordIdx / height;
-  int j = mapCoordIdx % height;
   if (i < width) {
     deviceDensityMap[mapCoordIdx] /= (float)numObjs;
   }
@@ -297,13 +344,130 @@ void kde2DParallelMap(
   cudaFree(deviceDensityMap);
 }
 
+
+__global__ static
+void sharedMemParallelKDE(
+    float *deviceObjs,
+    int numObjs,
+    int width,
+    int height,
+    float sigma,
+    float *deviceDensityMap) {
+  extern __shared__ float sharedMem[];
+  int mapCoordIdx = blockDim.x * blockIdx.x + threadIdx.x;
+  int mapCoordI = mapCoordIdx / height;
+  int mapCoordJ = mapCoordIdx % height;
+  float mapCoordX = float(mapCoordI) / float(width-1);
+  float mapCoordY = float(mapCoordJ) / float(height-1);
+  float estimate = 0.f;
+  int numLoops = numObjs / blockDim.x;
+  // assume sharedMemSize is a multiple of blockDim.x
+  for (int i = 0; i < numLoops; i += 1) {
+    // copy the ith block of mem from deviceObjs
+    int coordIdx = i * blockDim.x + threadIdx.x;
+    sharedMem[2*threadIdx.x] = deviceObjs[coordIdx * 2];
+    sharedMem[2*threadIdx.x+1] = deviceObjs[coordIdx * 2+1];
+    __syncthreads();
+    for (int j = 0; j < blockDim.x; j++) {
+      estimate += gauss2d(
+          sharedMem[2*j], sharedMem[2*j+1], // center
+          sigma,
+          mapCoordX,
+          mapCoordY);
+    }
+  }
+  // rest
+  // Extract rest here to reduce number of if check
+  int objectIdx = numLoops  * blockDim.x + threadIdx.x;
+  if (objectIdx < numObjs) {
+    sharedMem[2*threadIdx.x] = deviceObjs[objectIdx * 2];
+    sharedMem[2*threadIdx.x+1] = deviceObjs[objectIdx * 2 + 1];
+  }
+  __syncthreads();
+  for (int j = 0; j < blockDim.x && j + numLoops * blockDim.x < numObjs; j++) {
+    estimate += gauss2d(
+        sharedMem[2*j],
+        sharedMem[2*j+1],
+        sigma,
+        mapCoordX,
+        mapCoordY);
+  }
+  /*
+   * Note : we need to put this check at the end.
+   * Since when mapCoordI >= width, we still need
+   * to load the deviceObjs to sharedMem
+   */
+  if (mapCoordIdx < width * height) {
+    deviceDensityMap[mapCoordIdx] = estimate / numObjs;
+  }
+}
+
+static
+void kde2DSharedMem1(
+    float **objCoords,
+    int numObjs,
+    int width,
+    int height,
+    float sigma,
+    float **densityMap
+    ) {
+
+  const int numThreadsPerBlock = 128;
+  const int numBlocks = ceilDivide(width * height,numThreadsPerBlock);
+  float *deviceDensityMap;
+  cudaMalloc(&deviceDensityMap, width * height * sizeof(float));
+  float *deviceObjs;
+  cudaMalloc(&deviceObjs, numObjs * 2 * sizeof(float));
+  cudaMemcpy(deviceObjs, objCoords[0], numObjs * 2 * sizeof(float), cudaMemcpyHostToDevice);
+  const size_t sharedMemSize = numThreadsPerBlock * 2 * sizeof(float);
+
+#ifdef DEBUG
+  cout << "numThreadsPerBlock: " << numThreadsPerBlock << "\n"
+       << "numBlocks: " << numBlocks << endl;
+#endif
+#if 1
+  sharedMemParallelKDE<<<numBlocks, numThreadsPerBlock, sharedMemSize>>>(
+      deviceObjs,
+      numObjs,
+      width,
+      height,
+      sigma,
+      deviceDensityMap);
+#endif
+#if 0
+  sharedMemSeqKDE<<<numBlocks, numThreadsPerBlock, sharedMemSize>>>(
+      deviceObjs,
+      numObjs,
+      width,
+      height,
+      sigma,
+      deviceDensityMap);
+#endif
+  cudaThreadSynchronize(); checkLastCudaError();
+  cudaMemcpy(densityMap[0], deviceDensityMap,
+             width * height * sizeof(float),
+             cudaMemcpyDeviceToHost);
+  cudaFree(deviceDensityMap);
+  cudaFree(deviceObjs);
+}
+
 void kde2D(
     float **objCoords,
     int numObjs,  // 10 - 100000
-    float **densityMap,
     int width,  // 1024
     int height, // 768
-    float sigma) {
+    float sigma,
+    float **densityMap
+    ) {
+  kde2DSharedMem1(
+      objCoords,
+      numObjs,
+      width,
+      height,
+      sigma,
+      densityMap
+      );
+#if 0
   if ((parallel_method == PARALLEL_AUTO && width * height > numObjs) ||
       (parallel_method == PARALLEL_MAP)) {
 #ifdef DEBUG
@@ -312,10 +476,11 @@ void kde2D(
     kde2DParallelMap(
         objCoords,
         numObjs,
-        densityMap,
         width,
         height,
-        sigma);
+        sigma,
+        densityMap
+        );
   } else {
 #ifdef DEBUG
     cout << "Parallel Obj Update" << endl;
@@ -323,9 +488,11 @@ void kde2D(
     kde2DParallelObject(
         objCoords,
         numObjs,
-        densityMap,
         width,
         height,
-        sigma);
+        sigma,
+        densityMap
+        );
   }
+#endif
 }

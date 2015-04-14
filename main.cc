@@ -76,7 +76,7 @@ int main(int argc, char **argv) {
 
   kde_timing = wtime();
 
-  kde2D(objCoords, numObjs, densityMap, width, height, sigma);
+  kde2D(objCoords, numObjs, width, height, sigma, densityMap);
 
   kde_timing = wtime() - kde_timing;
 

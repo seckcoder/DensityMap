@@ -3,6 +3,7 @@
 
 #include <cassert>
 #include <string>
+#include <cstdio>
 #include <cstdlib>
 
 #define malloc2D(name, xDim, yDim, type) do {               \
@@ -15,9 +16,23 @@
 } while (0)
 
 
-#define free2D(mem) \
+#define free2D(mem) {\
   free(mem[0]); \
-  free(mem);
+  free(mem); \
+}
+
+#define msg(format, ...) do { fprintf(stderr, format, ##__VA_ARGS__); } while (0)
+#define err(format, ...) do { fprintf(stderr, format, ##__VA_ARGS__); exit(1); } while (0)
+
+inline void checkCuda(cudaError_t e) {
+      if (e != cudaSuccess) {
+        err("CUDA Error: %s\n", cudaGetErrorString(e));
+      }
+}
+
+inline void checkLastCudaError() {
+      checkCuda(cudaGetLastError());
+}
 
 
 double wtime(void);
@@ -30,10 +45,10 @@ void savetxt(const std::string &filename, float **densityMap, int width,
 void kde2D(
     float **objCoords,
     int numObjs,
-    float **densityMap,
     int width,
     int height,
-    float sigma);
+    float sigma,
+    float **densityMap);
 void setParallelMethod(int method);
 
 #endif

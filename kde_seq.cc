@@ -40,10 +40,10 @@ float estimateCoord(
 void kde2D(
     float **objCoords, // numObjs * 2
     int numObjs,
-    float **densityMap, // width * height
     int width,
     int height,
-    float sigma // bandwidth
+    float sigma, // bandwidth
+    float **densityMap // width * height
     ) {
   for (int i = 0; i < width; i++) {
     for (int j = 0; j < height; j++) {
