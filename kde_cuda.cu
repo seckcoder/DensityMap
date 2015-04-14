@@ -584,6 +584,39 @@ void kde2DParallelMapSharedMem(
   cudaFree(deviceObjs);
 }
 
+
+__global__ static
+void sharedMemParallelObject(
+    float *deviceObjs,
+    int numObjs,
+    int width,
+    int height,
+    float sigma,
+    float *deviceDensityMap) {
+  extern __shared__ float sharedMem[];
+
+  int objectIdx = blockDim.x * blockIdx.x + threadIdx.x;
+  if (objectIdx < numObjs) {
+    sharedMem[threadIdx.x * 2] = deviceObjs[objectIdx * 2];
+    sharedMem[threadIdx.x * 2+1] = deviceObjs[objectIdx * 2+1];
+    __syncthreads();
+    for (int mapCoordIdx = 0; mapCoordIdx < width * height;
+        mapCoordIdx += 1) {
+      int mapCoordI = mapCoordIdx / height;
+      int mapCoordJ = mapCoordIdx % height;
+      float mapCoordX = float(mapCoordI) / float(width-1);
+      float mapCoordY = float(mapCoordJ) / float(height-1);
+      deviceDensityMap[mapCoordIdx] +=
+        gauss2d(
+            sharedMem[2*threadIdx.x],
+            sharedMem[2*threadIdx.x+1],
+            sigma,
+            mapCoordX,
+            mapCoordY);
+    }
+  }
+}
+
 static
 void kde2DParallelObjectSharedMem(
     float **objCoords,
@@ -595,8 +628,10 @@ void kde2DParallelObjectSharedMem(
   const int numThreadsPerBlock = 128;
   const int numBlocks = ceilDivide(numObjs,
                                    numThreadsPerBlock);
+  const int sharedMemSize = numThreadsPerBlock * 2 * sizeof(float);
   float *deviceDensityMap;
   cudaMalloc(&deviceDensityMap, width * height * sizeof(float));
+  cudaMemset(deviceDensityMap, 0, width * height * sizeof(float));
   float *deviceObjs;
   cudaMalloc(&deviceObjs, numObjs * 2 * sizeof(float));
   cudaMemcpy(deviceObjs, objCoords[0], numObjs * 2 * sizeof(float), cudaMemcpyHostToDevice);
@@ -646,6 +681,14 @@ void kde2D(
         sigma,
         densityMap
         );
+  } else if (parallel_method == PARALLEL_OBJECT_SHARED_MEM) {
+    kde2DParallelObjectSharedMem(
+        objCoords,
+        numObjs,
+        width,
+        height,
+        sigma,
+        densityMap);
   } else if ((parallel_method == PARALLEL_AUTO && width * height > numObjs) ||
       (parallel_method == PARALLEL_MAP)) {
 #ifdef DEBUG
