@@ -5,7 +5,8 @@ import numpy as np
 
 def gen_data(n):
     return np.vstack((
-            np.random.multivariate_normal((0,0), [[1,0],[0,1]], n/2),
+            # np.random.multivariate_normal((0,0), [[1,0],[0,1]], n/2),
+            np.random.multivariate_normal((0,0), [[0.052,0.510],[0.510,8.882]], n/2),
             np.random.multivariate_normal((10,10), [[1, 0],[0, 1]], n/2)))
 
 
