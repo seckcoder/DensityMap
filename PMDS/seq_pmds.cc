@@ -15,6 +15,7 @@ float **_PivotMatrix;
 
 int *_PivotIndex;
 
+Mat<float> DeltaMatrix;
 
 /**
 	@input file 
@@ -29,12 +30,20 @@ void loadMatrixFromFile(float **matrix, const char* file){
 	float weight;
 	matrix = new float*[numOfObjs];
 	float *p = new float[numOfObjs * numOfObjs];
+	DeltaMatrix.set_size(numOfObjs,numOfObjs);
+	//initilize the _DeltaMatrix, and the DeltaMatrix
 	for(int i = 0; i < numOfObjs;i++){
 		matrix[i] = (p + i * numOfObjs);
+		for(int j = 0; j < numOfObjs;j++){
+			matrix[i][j] = std::numeric_limits<float>::max();
+			DeltaMatrix(i,j) = std::numeric_limits<float>::max();
+		}
 	}
+	
 	for(int i = 0; i < numOfEdges;i++){
 		fscanf(fd,"%d %d %f\n",&n1,&n2,&weight);
 		matrix[n1-1][n2-1] = weight;
+		DeltaMatrix(n1-1,n2-1) = weight;
 	}
 	fclose(fd);
 	return ;

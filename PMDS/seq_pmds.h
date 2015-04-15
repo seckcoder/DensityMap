@@ -1,16 +1,20 @@
 #ifndef _SEQ_PMDS_H
 #define _SEQ_PMDS_H
 #include "stdio.h"
-
+#include <armadillo>
+#include <limits>
 // @paramaters
 extern int numOfObjs;
 extern int numOfPivots;
 extern int numOfEdges;
 
+using namespace arma;
 // @Input Data
 
 // DeltaMatrix is a numOfObjs * numOfObjs matrix
 extern float **_DeltaMatrix;
+extern Mat<float> DeltaMatrix;
+
 // CMatrix is a numOfObjs * numOfPivots matrix
 extern float **_CMatrix;
 

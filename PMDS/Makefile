@@ -7,7 +7,7 @@ INCLUDEFLAGS=-I $(PATH_TO_BGL)
 DEBUG=-g
 
 seq_main: seq_pmds.cc seq_pmds.h seq_main.cc
-	$(CXX) seq_pmds.cc seq_main.cc -o seq_main
+	$(CXX) seq_pmds.cc seq_main.cc -o seq_main $(LIBFLAGS)
 Graph:
 	$(CXX) -c Graph.cc -o Graph.o $(CFLAGS)
 test:
