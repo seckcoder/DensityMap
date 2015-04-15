@@ -5,3 +5,4 @@ seq_output
 *.swp
 seq_main
 cuda_main
+.DS_store
