@@ -2,6 +2,6 @@
 
 int main(int argc, char **argv){
 
-	loadMatrixFromFile(argv[1]);
+	loadMatrixFromFile(_DeltaMatrix,argv[1]);
 	return 0;
 }

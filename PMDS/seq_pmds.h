@@ -2,13 +2,28 @@
 #define _SEQ_PMDS_H
 #include "stdio.h"
 
+// @paramaters
+extern int numOfObjs;
+extern int numOfPivots;
+extern int numOfEdges;
 
-void loadMatrixFromFile(const char *file);
+// @Input Data
+
+// DeltaMatrix is a numOfObjs * numOfObjs matrix
+extern float **_DeltaMatrix;
+// CMatrix is a numOfObjs * numOfPivots matrix
+extern float **_CMatrix;
+
+extern float **_PivotMatrix;
+
+extern int *_PivotIndex;
+
+extern void loadMatrixFromFile(float **, const char *file);
 /**
 	@input numOfPivots, deltaMatrix
 	@output pivotIndex
 */
-void selectPivot(int *pivotIndex,const int &numOfPivots, float **deltaMatrix);
+extern void selectPivot(int *pivotIndex,const int &numOfPivots, float **deltaMatrix);
 
 /**
 	@input pivotMatrix

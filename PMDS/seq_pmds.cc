@@ -16,16 +16,25 @@ float **_PivotMatrix;
 int *_PivotIndex;
 
 
-void loadMatrixFromFile(const char *file){
+/**
+	@input file 
+	@output **matrix
+*/
+void loadMatrixFromFile(float **matrix, const char* file){
 	FILE * fd = fopen(file,"r");
 	int dummy;
 	fscanf(fd,"%d %d %d\n",&numOfObjs,&dummy,&numOfEdges);
 	printf("numOfObjs is %d, numOfEdges is %d\n",numOfObjs,numOfEdges);
 	int n1, n2;
 	float weight;
+	matrix = new float*[numOfObjs];
+	float *p = new float[numOfObjs * numOfObjs];
+	for(int i = 0; i < numOfObjs;i++){
+		matrix[i] = (p + i * numOfObjs);
+	}
 	for(int i = 0; i < numOfEdges;i++){
 		fscanf(fd,"%d %d %f\n",&n1,&n2,&weight);
-		printf("%d %d %f\n",n1,n2,weight);
+		matrix[n1-1][n2-1] = weight;
 	}
 	fclose(fd);
 	return ;
