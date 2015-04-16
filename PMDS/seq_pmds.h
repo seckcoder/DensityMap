@@ -1,19 +1,19 @@
 #ifndef _SEQ_PMDS_H
 #define _SEQ_PMDS_H
 #include "stdio.h"
+#include "assert.h"
 #include <armadillo>
 #include <limits>
 // @paramaters
-extern int numOfObjs;
-extern int numOfPivots;
-extern int numOfEdges;
+extern int _numOfObjs;
+extern int _numOfPivots;
+extern int _numOfEdges;
 
 using namespace arma;
 // @Input Data
 
 // DeltaMatrix is a numOfObjs * numOfObjs matrix
 extern float **_DeltaMatrix;
-extern Mat<float> DeltaMatrix;
 
 // CMatrix is a numOfObjs * numOfPivots matrix
 extern float **_CMatrix;
@@ -22,7 +22,7 @@ extern float **_PivotMatrix;
 
 extern int *_PivotIndex;
 
-extern void loadMatrixFromFile(float **, const char *file);
+extern void loadMatrixFromFile(const char *file);
 /**
 	@input numOfPivots, deltaMatrix
 	@output pivotIndex
@@ -33,11 +33,7 @@ extern void selectPivot(int *pivotIndex,const int &numOfPivots, float **deltaMat
 	@input pivotMatrix
 	@output cMatrix
 */
-void calculateCMatrix(float **cMatrix,
-						float **pivotMatrix,
-						const int &numOfPivots,
-						float **deltaMatrix,
-						const int &numOfObjs);
+void calculateCMatrix();
 
 /**
 	@input cMatrix
