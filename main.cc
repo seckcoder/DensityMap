@@ -14,7 +14,7 @@ static void usage(char *argv0) {
       "       -s sigma[default=0.1]     : bandwidth for kernel density estimation\n"
       "       -w width[default=800]     : width of density map\n"
       "       -h height[default=800]    : height of density map\n"
-      "       -p parallel[default=0]    : Parallel Method. AUTO(%d), MAP(1), OBJECT(2), MAP_SHARED(3), OBJECT_SHARED(4)\n"
+      "       -p parallel[default=0]    : Parallel Method. AUTO(%d), OBJECT(1), MAP(2), MAP_SHARED(3), OBJECT_SHARED(4)\n"
       "       -o output                 : output file name of density map\n";
   fprintf(stderr, help, argv0);
   exit(-1);
